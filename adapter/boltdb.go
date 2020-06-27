@@ -35,20 +35,6 @@ func NewORMAdapter(db *bolt.DB) orm.ORM {
 	}
 }
 
-// HasTable(entity interface{}) bool
-// CreateTable(models ...interface{}) Result
-// TruncateTable(entity interface{}) Result
-// Create(entity interface{}) Result
-// DropTable(entities ...interface{}) Result
-// GetModelDefinition(entity interface{}) ModelDefinition
-// GetUnderlyingORM() interface{}
-// GetLatestSchemaIdentityHashAndVersion() (identityHash string, version int, err error)
-// DoInTransaction(fc func(tx ORM) error) (err error)
-
-func isValidModel(modelDef orm.ModelDefinition) bool {
-	return modelDef.TableName != ""
-}
-
 func (oAdap *ORMAdapter) getBucketForEntity(entity interface{}) (bucket *bolt.Bucket) {
 
 	modelDef := oAdap.GetModelDefinition(entity)
@@ -206,24 +192,6 @@ func (oAdap *ORMAdapter) GetModelDefinition(entity interface{}) (modelDefinition
 //GetUnderlyingORM Returns the underlying DB object
 func (oAdap *ORMAdapter) GetUnderlyingORM() interface{} {
 	return oAdap.db
-}
-
-func getReflectTypeForEntity(entity interface{}) (reflectType reflect.Type, err error) {
-	if entity == nil {
-		err = fmt.Errorf("Bad argument: Nil entity")
-		return
-	}
-
-	reflectType = reflect.ValueOf(entity).Type()
-	for reflectType.Kind() == reflect.Ptr {
-		reflectType = reflectType.Elem()
-	}
-
-	if reflectType.Kind() != reflect.Struct {
-		err = fmt.Errorf("Entity must be a struct")
-	}
-
-	return
 }
 
 //GetLatestSchemaIdentityHashAndVersion Get latest metadata for Room
