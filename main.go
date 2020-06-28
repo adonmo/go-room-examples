@@ -1,8 +1,10 @@
 package main
 
 import (
+	"encoding/json"
 	"flag"
 	"fmt"
+	"io/ioutil"
 
 	"github.com/adonmo/goroom"
 	"github.com/adonmo/goroom/orm"
@@ -18,6 +20,7 @@ import (
 
 func main() {
 	version := flag.Int("version", 0, "Version number of the database schema for which init must be run")
+	dataFile := flag.String("insertFrom", "", "Data file to insert data from into the database after init")
 
 	currentVersionNumber := orm.VersionNumber(*version)
 	if currentVersionNumber > 3 || currentVersionNumber < 1 {
@@ -31,22 +34,34 @@ func main() {
 
 	var entityList []interface{}
 	var availableMigrations []orm.Migration
+	var dataInputArr interface{}
 
 	switch currentVersionNumber {
 	case 1:
 		entityList = []interface{}{v1.User{}}
 		availableMigrations = v1.GetMigrations()
+		dataInputArr = []*v1.User{}
 	case 2:
 		entityList = []interface{}{v2.User{}}
 		availableMigrations = v2.GetMigrations()
+		dataInputArr = []*v2.User{}
 	case 3:
 		entityList = []interface{}{v3.User{}}
 		availableMigrations = append(v3.GetMigrations(), v2.GetMigrations()...)
+		dataInputArr = []*v3.User{}
 	}
 
 	err = initObjectStore(db, entityList, availableMigrations, currentVersionNumber, false)
 	if err != nil {
 		panic(err)
+	}
+
+	if *dataFile != "" {
+		data, _ := ioutil.ReadFile(*dataFile)
+		err := json.Unmarshal(data, &dataInputArr)
+		if err != nil {
+			panic(err)
+		}
 	}
 
 	fmt.Printf("Object Store initialized succesfully for version: %v\n", currentVersionNumber)
