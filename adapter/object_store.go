@@ -39,7 +39,8 @@ func NewORMAdapter(db *bolt.DB) *ObjectStoreORMAdapter {
 //NewORMAdapterForTransaction Constructor
 func NewORMAdapterForTransaction(db *bolt.DB, currentTx *bolt.Tx) *ObjectStoreORMAdapter {
 	return &ObjectStoreORMAdapter{
-		db: db,
+		db:        db,
+		currentTx: currentTx,
 	}
 }
 

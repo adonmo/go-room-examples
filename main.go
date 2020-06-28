@@ -21,6 +21,7 @@ import (
 func main() {
 	version := flag.Int("version", 0, "Version number of the database schema for which init must be run")
 	dataFile := flag.String("insertFrom", "", "Data file to insert data from into the database after init")
+	flag.Parse()
 
 	currentVersionNumber := orm.VersionNumber(*version)
 	if currentVersionNumber > 3 || currentVersionNumber < 1 {
