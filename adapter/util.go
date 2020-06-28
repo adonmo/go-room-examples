@@ -1,6 +1,9 @@
 package adapter
 
 import (
+	"fmt"
+	"reflect"
+
 	"github.com/adonmo/goroom/orm"
 )
 

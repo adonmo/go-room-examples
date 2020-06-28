@@ -29,13 +29,14 @@ type ObjectStoreORMAdapter struct {
 }
 
 //NewORMAdapter Constructor
-func NewORMAdapter(db *bolt.DB) orm.ORM {
+func NewORMAdapter(db *bolt.DB) *ObjectStoreORMAdapter {
 	return &ObjectStoreORMAdapter{
 		db: db,
 	}
 }
 
-func (oAdap *ObjectStoreORMAdapter) getBucketForEntity(entity interface{}) (bucket *bolt.Bucket) {
+//GetBucketForEntity Namesake
+func (oAdap *ObjectStoreORMAdapter) GetBucketForEntity(entity interface{}) (bucket *bolt.Bucket) {
 	modelDef := oAdap.GetModelDefinition(entity)
 	if isValidModel(modelDef) {
 		oAdap.db.View(func(tx *bolt.Tx) error {
@@ -49,7 +50,7 @@ func (oAdap *ObjectStoreORMAdapter) getBucketForEntity(entity interface{}) (buck
 
 //HasTable Check if a table for the given entity exists
 func (oAdap *ObjectStoreORMAdapter) HasTable(entity interface{}) bool {
-	bucket := oAdap.getBucketForEntity(entity)
+	bucket := oAdap.GetBucketForEntity(entity)
 	return bucket != nil
 }
 
@@ -78,7 +79,7 @@ func (oAdap *ObjectStoreORMAdapter) CreateTable(entities ...interface{}) orm.Res
 //TruncateTable Clear out a table
 func (oAdap *ObjectStoreORMAdapter) TruncateTable(entity interface{}) orm.Result {
 	err := oAdap.db.Update(func(tx *bolt.Tx) error {
-		bucket := oAdap.getBucketForEntity(entity)
+		bucket := oAdap.GetBucketForEntity(entity)
 		if bucket == nil {
 			return fmt.Errorf("No table for entity")
 		}
@@ -104,7 +105,7 @@ func (oAdap *ObjectStoreORMAdapter) TruncateTable(entity interface{}) orm.Result
 //Create Add the entity to the table
 func (oAdap *ObjectStoreORMAdapter) Create(entity interface{}) orm.Result {
 	err := oAdap.db.Update(func(tx *bolt.Tx) error {
-		bucket := oAdap.getBucketForEntity(entity)
+		bucket := oAdap.GetBucketForEntity(entity)
 		if bucket == nil {
 			return fmt.Errorf("No table for entity")
 		}
@@ -125,7 +126,7 @@ func (oAdap *ObjectStoreORMAdapter) Create(entity interface{}) orm.Result {
 			return err
 		}
 
-		bucket.Put(itob(nextID), buf)
+		bucket.Put(Itob(nextID), buf)
 		return nil
 	})
 
@@ -134,7 +135,7 @@ func (oAdap *ObjectStoreORMAdapter) Create(entity interface{}) orm.Result {
 	}
 }
 
-func itob(v int) []byte {
+func Itob(v int) []byte {
 	b := make([]byte, 8)
 	binary.BigEndian.PutUint64(b, uint64(v))
 	return b
@@ -193,7 +194,7 @@ func (oAdap *ObjectStoreORMAdapter) GetUnderlyingORM() interface{} {
 func (oAdap *ObjectStoreORMAdapter) GetLatestSchemaIdentityHashAndVersion() (identityHash string, version int, err error) {
 	var latestMetadata *room.GoRoomSchemaMaster
 	err = oAdap.db.View(func(tx *bolt.Tx) error {
-		bucket := oAdap.getBucketForEntity(room.GoRoomSchemaMaster{})
+		bucket := oAdap.GetBucketForEntity(room.GoRoomSchemaMaster{})
 		if bucket == nil {
 			return fmt.Errorf("No such table")
 		}
