@@ -49,6 +49,9 @@ func (oAdap *ObjectStoreORMAdapter) GetBucketForEntity(entity interface{}) (buck
 	modelDef := oAdap.GetModelDefinition(entity)
 	if isValidModel(modelDef) {
 		oAdap.db.View(func(tx *bolt.Tx) error {
+			if oAdap.currentTx != nil {
+				tx = oAdap.currentTx
+			}
 			bucket = tx.Bucket([]byte(modelDef.TableName))
 			return nil
 		})
@@ -123,7 +126,8 @@ func (oAdap *ObjectStoreORMAdapter) Create(entity interface{}) orm.Result {
 	}
 	nextID := int(nextSeq)
 
-	val := reflect.ValueOf(entity).FieldByName("ID")
+	entityVal := reflect.ValueOf(entity)
+	val := reflect.Indirect(entityVal).FieldByName("ID")
 	if val.IsValid() && val.CanSet() && val.Kind() == reflect.Int {
 		val.SetInt(int64(nextID))
 	}
