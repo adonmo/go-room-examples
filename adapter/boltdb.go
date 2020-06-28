@@ -12,31 +12,30 @@ import (
 	bolt "go.etcd.io/bbolt"
 )
 
-//BoltDBField Representation
-type BoltDBField struct {
+//ObjectDataField Representation
+type ObjectDataField struct {
 	Name string
 	Tag  reflect.StructTag
 }
 
-//BoltDBEntityModel Entity Model for GORM for Room
-type BoltDBEntityModel struct {
-	Fields []*BoltDBField
+//ObjectStoreEntityModel Entity Model for GORM for Room
+type ObjectStoreEntityModel struct {
+	Fields []*ObjectDataField
 }
 
-//ORMAdapter Adapter for BoltDB to work with Room
-type ORMAdapter struct {
+//ObjectStoreORMAdapter Adapter for BoltDB to work with Room
+type ObjectStoreORMAdapter struct {
 	db *bolt.DB
 }
 
 //NewORMAdapter Constructor
 func NewORMAdapter(db *bolt.DB) orm.ORM {
-	return &ORMAdapter{
+	return &ObjectStoreORMAdapter{
 		db: db,
 	}
 }
 
-func (oAdap *ORMAdapter) getBucketForEntity(entity interface{}) (bucket *bolt.Bucket) {
-
+func (oAdap *ObjectStoreORMAdapter) getBucketForEntity(entity interface{}) (bucket *bolt.Bucket) {
 	modelDef := oAdap.GetModelDefinition(entity)
 	if isValidModel(modelDef) {
 		oAdap.db.View(func(tx *bolt.Tx) error {
@@ -49,14 +48,13 @@ func (oAdap *ORMAdapter) getBucketForEntity(entity interface{}) (bucket *bolt.Bu
 }
 
 //HasTable Check if a table for the given entity exists
-func (oAdap *ORMAdapter) HasTable(entity interface{}) bool {
+func (oAdap *ObjectStoreORMAdapter) HasTable(entity interface{}) bool {
 	bucket := oAdap.getBucketForEntity(entity)
 	return bucket != nil
 }
 
 //CreateTable Create tables for given entities
-func (oAdap *ORMAdapter) CreateTable(entities ...interface{}) orm.Result {
-
+func (oAdap *ObjectStoreORMAdapter) CreateTable(entities ...interface{}) orm.Result {
 	err := oAdap.db.Update(func(tx *bolt.Tx) error {
 		for _, entity := range entities {
 			modelDef := oAdap.GetModelDefinition(entity)
@@ -78,8 +76,7 @@ func (oAdap *ORMAdapter) CreateTable(entities ...interface{}) orm.Result {
 }
 
 //TruncateTable Clear out a table
-func (oAdap *ORMAdapter) TruncateTable(entity interface{}) orm.Result {
-
+func (oAdap *ObjectStoreORMAdapter) TruncateTable(entity interface{}) orm.Result {
 	err := oAdap.db.Update(func(tx *bolt.Tx) error {
 		bucket := oAdap.getBucketForEntity(entity)
 		if bucket == nil {
@@ -105,8 +102,7 @@ func (oAdap *ORMAdapter) TruncateTable(entity interface{}) orm.Result {
 }
 
 //Create Add the entity to the table
-func (oAdap *ORMAdapter) Create(entity interface{}) orm.Result {
-
+func (oAdap *ObjectStoreORMAdapter) Create(entity interface{}) orm.Result {
 	err := oAdap.db.Update(func(tx *bolt.Tx) error {
 		bucket := oAdap.getBucketForEntity(entity)
 		if bucket == nil {
@@ -145,8 +141,7 @@ func itob(v int) []byte {
 }
 
 //DropTable Drop a table
-func (oAdap *ORMAdapter) DropTable(entities ...interface{}) orm.Result {
-
+func (oAdap *ObjectStoreORMAdapter) DropTable(entities ...interface{}) orm.Result {
 	err := oAdap.db.Update(func(tx *bolt.Tx) error {
 		for _, entity := range entities {
 			modelDef := oAdap.GetModelDefinition(entity)
@@ -165,16 +160,16 @@ func (oAdap *ORMAdapter) DropTable(entities ...interface{}) orm.Result {
 }
 
 //GetModelDefinition Gives model definition of a given database entity
-func (oAdap *ORMAdapter) GetModelDefinition(entity interface{}) (modelDefinition orm.ModelDefinition) {
+func (oAdap *ObjectStoreORMAdapter) GetModelDefinition(entity interface{}) (modelDefinition orm.ModelDefinition) {
 	reflectType, err := getReflectTypeForEntity(entity)
 	if err != nil {
 		return
 	}
 
-	fields := make([]*BoltDBField, 0, reflectType.NumField())
+	fields := make([]*ObjectDataField, 0, reflectType.NumField())
 	for i := 0; i < reflectType.NumField(); i++ {
 		if fieldStruct := reflectType.Field(i); ast.IsExported(fieldStruct.Name) {
-			fields = append(fields, &BoltDBField{
+			fields = append(fields, &ObjectDataField{
 				Name: fieldStruct.Name + ":" + fieldStruct.Type.Name(),
 				Tag:  fieldStruct.Tag,
 			})
@@ -182,7 +177,7 @@ func (oAdap *ORMAdapter) GetModelDefinition(entity interface{}) (modelDefinition
 	}
 
 	return orm.ModelDefinition{
-		EntityModel: &BoltDBEntityModel{
+		EntityModel: &ObjectStoreEntityModel{
 			Fields: fields,
 		},
 		TableName: reflectType.Name(),
@@ -190,13 +185,12 @@ func (oAdap *ORMAdapter) GetModelDefinition(entity interface{}) (modelDefinition
 }
 
 //GetUnderlyingORM Returns the underlying DB object
-func (oAdap *ORMAdapter) GetUnderlyingORM() interface{} {
+func (oAdap *ObjectStoreORMAdapter) GetUnderlyingORM() interface{} {
 	return oAdap.db
 }
 
 //GetLatestSchemaIdentityHashAndVersion Get latest metadata for Room
-func (oAdap *ORMAdapter) GetLatestSchemaIdentityHashAndVersion() (identityHash string, version int, err error) {
-
+func (oAdap *ObjectStoreORMAdapter) GetLatestSchemaIdentityHashAndVersion() (identityHash string, version int, err error) {
 	var latestMetadata *room.GoRoomSchemaMaster
 	err = oAdap.db.View(func(tx *bolt.Tx) error {
 		bucket := oAdap.getBucketForEntity(room.GoRoomSchemaMaster{})
@@ -231,8 +225,7 @@ func (oAdap *ORMAdapter) GetLatestSchemaIdentityHashAndVersion() (identityHash s
 }
 
 //DoInTransaction Runs the DB operations in a single transaction
-func (oAdap *ORMAdapter) DoInTransaction(fc func(wrappedORM orm.ORM) error) (err error) {
-
+func (oAdap *ObjectStoreORMAdapter) DoInTransaction(fc func(wrappedORM orm.ORM) error) (err error) {
 	boltTransactionFunc := func(tx *bolt.Tx) error {
 		return fc(NewORMAdapter(tx.DB()))
 	}
