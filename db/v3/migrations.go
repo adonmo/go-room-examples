@@ -40,7 +40,11 @@ func GetMigrations() []orm.Migration {
 			BaseVersion:   orm.VersionNumber(2),
 			TargetVersion: orm.VersionNumber(3),
 			MigrationFunc: func(db interface{}) error {
-				return nil
+				tx, ok := db.(*bbolt.Tx)
+				if !ok {
+					return fmt.Errorf("Bad argument for migration")
+				}
+				return migrateFrom2To3(tx)
 			},
 		},
 	}
