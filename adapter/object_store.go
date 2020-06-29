@@ -60,7 +60,16 @@ func (oAdap *ObjectStoreORMAdapter) GetBucketForEntity(entity interface{}, tx *b
 
 //HasTable Check if a table for the given entity exists
 func (oAdap *ObjectStoreORMAdapter) HasTable(entity interface{}) bool {
-	bucket := oAdap.GetBucketForEntity(entity, nil)
+	var bucket *bolt.Bucket
+	if oAdap.currentTx == nil {
+		oAdap.db.View(func(tx *bolt.Tx) error {
+			bucket = oAdap.GetBucketForEntity(entity, tx)
+			return nil
+		})
+	} else {
+		bucket = oAdap.GetBucketForEntity(entity, nil)
+	}
+
 	return bucket != nil
 }
 
