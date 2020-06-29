@@ -69,7 +69,7 @@ func main() {
 		objectStoreORMAdapter := objectstoreadapter.NewORMAdapter(db)
 		for _, entity := range entityList {
 			modelDef := objectStoreORMAdapter.GetModelDefinition(entity)
-			fmt.Printf("%+v", modelDef)
+			fmt.Printf("%+v\n", modelDef)
 			saveUserData(db, entity, rawJSONMap[modelDef.TableName])
 		}
 	}
