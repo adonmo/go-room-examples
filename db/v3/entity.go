@@ -6,3 +6,8 @@ type User struct {
 	Name  string `json:"username"`
 	Score int
 }
+
+//GetSampleData Namesake
+func GetSampleData() []interface{} {
+	return []interface{}{}
+}

@@ -61,7 +61,7 @@ func migrateFrom2To3(tx *bbolt.Tx) error {
 	err := bucket.ForEach(func(k, v []byte) error {
 		existing := struct {
 			ID   int
-			Name string
+			Name string `json:"username"`
 		}{}
 
 		err := json.Unmarshal(v, &existing)

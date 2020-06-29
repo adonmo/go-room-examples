@@ -4,7 +4,6 @@ import (
 	"encoding/json"
 	"flag"
 	"fmt"
-	"io/ioutil"
 
 	"github.com/adonmo/goroom"
 	"github.com/adonmo/goroom/orm"
@@ -20,7 +19,7 @@ import (
 
 func main() {
 	version := flag.Int("version", 0, "Version number of the database schema for which init must be run")
-	dataFile := flag.String("insertFrom", "", "Data file to insert data from into the database after init")
+	insertSamples := flag.Bool("insertSamples", true, "Should insert samples after init?")
 	dumpData := flag.Bool("dumpData", true, "Dump the data from database after Init")
 	flag.Parse()
 
@@ -38,17 +37,21 @@ func main() {
 
 	var entityList []interface{}
 	var availableMigrations []orm.Migration
+	var sampleData []interface{}
 
 	switch currentVersionNumber {
 	case 1:
 		entityList = []interface{}{v1.User{}}
 		availableMigrations = v1.GetMigrations()
+		sampleData = v1.GetSampleData()
 	case 2:
 		entityList = []interface{}{v2.User{}}
 		availableMigrations = v2.GetMigrations()
+		sampleData = v2.GetSampleData()
 	case 3:
 		entityList = []interface{}{v3.User{}}
 		availableMigrations = append(v3.GetMigrations(), v2.GetMigrations()...)
+		sampleData = v3.GetSampleData()
 	}
 
 	err = initObjectStore(db, entityList, availableMigrations, currentVersionNumber, false)
@@ -56,22 +59,23 @@ func main() {
 		panic(err)
 	}
 
-	if *dataFile != "" {
-		data, _ := ioutil.ReadFile(*dataFile)
-		rawJSONMap := make(map[string][]interface{})
-		err := json.Unmarshal(data, &rawJSONMap)
+	if *insertSamples {
+		err := db.Update(func(tx *bbolt.Tx) error {
+			objectStoreORMAdapter := objectstoreadapter.NewORMAdapterForTransaction(db, tx)
+			for _, entity := range sampleData {
+
+				result := objectStoreORMAdapter.Create(entity)
+				if result.Error != nil {
+					return result.Error
+				}
+			}
+			return nil
+		})
+
 		if err != nil {
 			panic(err)
 		}
 
-		fmt.Printf("%v\n", rawJSONMap)
-
-		objectStoreORMAdapter := objectstoreadapter.NewORMAdapter(db)
-		for _, entity := range entityList {
-			modelDef := objectStoreORMAdapter.GetModelDefinition(entity)
-			fmt.Printf("%+v\n", modelDef)
-			saveUserData(db, entity, rawJSONMap[modelDef.TableName])
-		}
 	}
 
 	if *dumpData {
@@ -105,15 +109,14 @@ func initObjectStore(db *bbolt.DB, entityList []interface{}, migrations []orm.Mi
 func dumpUserData(db *bbolt.DB, entity interface{}) {
 	objectStoreAdapter := objectstoreadapter.NewORMAdapter(db)
 
-	db.View(func(tx *bbolt.Tx) error {
+	err := db.View(func(tx *bbolt.Tx) error {
 		bucket := objectStoreAdapter.GetBucketForEntity(entity, tx)
 		if bucket == nil {
 			return fmt.Errorf("No such table")
 		}
 
 		err := bucket.ForEach(func(k, v []byte) error {
-
-			err := json.Unmarshal(v, entity)
+			err := json.Unmarshal(v, &entity)
 			if err != nil {
 				return err
 			}
@@ -124,9 +127,13 @@ func dumpUserData(db *bbolt.DB, entity interface{}) {
 
 		return err
 	})
+
+	if err != nil {
+		panic(err)
+	}
 }
 
-func saveUserData(db *bbolt.DB, entity interface{}, rawDataDictionary []interface{}) {
+func saveUserData(db *bbolt.DB, entity interface{}, rawDataDictionary []map[string]interface{}) {
 
 	db.Update(func(tx *bbolt.Tx) error {
 
@@ -141,7 +148,11 @@ func saveUserData(db *bbolt.DB, entity interface{}, rawDataDictionary []interfac
 				panic(err)
 			}
 
-			fmt.Printf("Entity %+v\n", entity)
+			user, ok := entity.(v1.User)
+			if !ok {
+				panic(fmt.Errorf("Incorrect data type when unmarshalling"))
+			}
+			fmt.Printf("Entity %+v\n", user)
 		}
 		return nil
 	})
