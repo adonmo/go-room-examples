@@ -46,45 +46,37 @@ func GetMigrations() []orm.Migration {
 	}
 }
 
-func migrateFrom1To2(db *bbolt.DB) error {
-	objectStoreAdapter := adapter.NewORMAdapter(db)
+func migrateFrom1To2(tx *bbolt.Tx) error {
+	objectStoreAdapter := adapter.NewORMAdapter(tx.DB())
 
-	err := db.Update(func(tx *bbolt.Tx) error {
-		bucket := objectStoreAdapter.GetBucketForEntity(User{})
-		if bucket == nil {
-			return fmt.Errorf("No such table")
-		}
+	bucket := objectStoreAdapter.GetBucketForEntity(User{}, tx)
+	if bucket == nil {
+		return fmt.Errorf("No such table")
+	}
 
-		err := bucket.ForEach(func(k, v []byte) error {
-			existing := struct {
-				ID   int
-				Name string
-			}{}
+	err := bucket.ForEach(func(k, v []byte) error {
+		existing := struct {
+			ID   int
+			Name string
+		}{}
 
-			err := json.Unmarshal(v, &existing)
-			if err != nil {
-				return err
-			}
-
-			newEntry := User{
-				ID:   existing.ID,
-				Name: existing.Name,
-			}
-
-			//The name field will be rewritten in serialized data with key as username instead of name
-			newData, err := json.Marshal(newEntry)
-			if err != nil {
-				return err
-			}
-
-			return bucket.Put([]byte(adapter.Itob(existing.ID)), newData)
-		})
-
+		err := json.Unmarshal(v, &existing)
 		if err != nil {
 			return err
 		}
 
-		return nil
+		newEntry := User{
+			ID:   existing.ID,
+			Name: existing.Name,
+		}
+
+		//The name field will be rewritten in serialized data with key as username instead of name
+		newData, err := json.Marshal(newEntry)
+		if err != nil {
+			return err
+		}
+
+		return bucket.Put([]byte(adapter.Itob(existing.ID)), newData)
 	})
 
 	return err

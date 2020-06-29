@@ -45,16 +45,14 @@ func NewORMAdapterForTransaction(db *bolt.DB, currentTx *bolt.Tx) *ObjectStoreOR
 }
 
 //GetBucketForEntity Namesake
-func (oAdap *ObjectStoreORMAdapter) GetBucketForEntity(entity interface{}) (bucket *bolt.Bucket) {
+func (oAdap *ObjectStoreORMAdapter) GetBucketForEntity(entity interface{}, tx *bolt.Tx) (bucket *bolt.Bucket) {
 	modelDef := oAdap.GetModelDefinition(entity)
 	if isValidModel(modelDef) {
-		oAdap.db.View(func(tx *bolt.Tx) error {
-			if oAdap.currentTx != nil {
-				tx = oAdap.currentTx
-			}
-			bucket = tx.Bucket([]byte(modelDef.TableName))
-			return nil
-		})
+		if tx == nil {
+			tx = oAdap.currentTx
+		}
+
+		bucket = tx.Bucket([]byte(modelDef.TableName))
 	}
 
 	return
@@ -62,7 +60,7 @@ func (oAdap *ObjectStoreORMAdapter) GetBucketForEntity(entity interface{}) (buck
 
 //HasTable Check if a table for the given entity exists
 func (oAdap *ObjectStoreORMAdapter) HasTable(entity interface{}) bool {
-	bucket := oAdap.GetBucketForEntity(entity)
+	bucket := oAdap.GetBucketForEntity(entity, nil)
 	return bucket != nil
 }
 
@@ -89,7 +87,7 @@ func (oAdap *ObjectStoreORMAdapter) CreateTable(entities ...interface{}) orm.Res
 //TruncateTable Clear out a table
 func (oAdap *ObjectStoreORMAdapter) TruncateTable(entity interface{}) orm.Result {
 	var resultErr error
-	bucket := oAdap.GetBucketForEntity(entity)
+	bucket := oAdap.GetBucketForEntity(entity, nil)
 	if bucket == nil {
 		resultErr = fmt.Errorf("No table for entity")
 	}
@@ -111,7 +109,7 @@ func (oAdap *ObjectStoreORMAdapter) TruncateTable(entity interface{}) orm.Result
 
 //Create Add the entity to the table
 func (oAdap *ObjectStoreORMAdapter) Create(entity interface{}) orm.Result {
-	bucket := oAdap.GetBucketForEntity(entity)
+	bucket := oAdap.GetBucketForEntity(entity, nil)
 	if bucket == nil {
 		return orm.Result{
 			Error: fmt.Errorf("No table for entity"),
@@ -197,13 +195,35 @@ func (oAdap *ObjectStoreORMAdapter) GetModelDefinition(entity interface{}) (mode
 
 //GetUnderlyingORM Returns the underlying DB object
 func (oAdap *ObjectStoreORMAdapter) GetUnderlyingORM() interface{} {
-	return oAdap.db
+	return oAdap.currentTx
 }
 
 //GetLatestSchemaIdentityHashAndVersion Get latest metadata for Room
 func (oAdap *ObjectStoreORMAdapter) GetLatestSchemaIdentityHashAndVersion() (identityHash string, version int, err error) {
 	var latestMetadata *room.GoRoomSchemaMaster
-	bucket := oAdap.GetBucketForEntity(room.GoRoomSchemaMaster{})
+	if oAdap.currentTx == nil {
+		err = oAdap.db.View(func(tx *bolt.Tx) error {
+			latestMetadata, err = oAdap.getLatestRoomMetadata(tx)
+			return err
+		})
+	} else {
+		latestMetadata, err = oAdap.getLatestRoomMetadata(oAdap.currentTx)
+	}
+
+	if err != nil {
+		return
+	}
+
+	if latestMetadata != nil {
+		identityHash = latestMetadata.IdentityHash
+		version = int(latestMetadata.Version)
+	}
+
+	return
+}
+
+func (oAdap *ObjectStoreORMAdapter) getLatestRoomMetadata(tx *bolt.Tx) (latestMetadata *room.GoRoomSchemaMaster, err error) {
+	bucket := oAdap.GetBucketForEntity(room.GoRoomSchemaMaster{}, tx)
 	if bucket == nil {
 		err = fmt.Errorf("No such table")
 		return
@@ -219,15 +239,6 @@ func (oAdap *ObjectStoreORMAdapter) GetLatestSchemaIdentityHashAndVersion() (ide
 		latestMetadata = &metadata
 		return nil
 	})
-
-	if err != nil {
-		return
-	}
-
-	if latestMetadata != nil {
-		identityHash = latestMetadata.IdentityHash
-		version = int(latestMetadata.Version)
-	}
 
 	return
 }
