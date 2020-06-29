@@ -21,6 +21,7 @@ import (
 func main() {
 	version := flag.Int("version", 0, "Version number of the database schema for which init must be run")
 	dataFile := flag.String("insertFrom", "", "Data file to insert data from into the database after init")
+	dumpData := flag.Bool("dumpData", true, "Dump the data from database after Init")
 	flag.Parse()
 
 	currentVersionNumber := orm.VersionNumber(*version)
@@ -29,27 +30,25 @@ func main() {
 	}
 
 	db, err := bbolt.Open("goroomex.db", 0600, nil)
+	defer db.Close()
+
 	if err != nil {
 		panic(err)
 	}
 
 	var entityList []interface{}
 	var availableMigrations []orm.Migration
-	var dataInputArr interface{}
 
 	switch currentVersionNumber {
 	case 1:
 		entityList = []interface{}{v1.User{}}
 		availableMigrations = v1.GetMigrations()
-		dataInputArr = []*v1.User{}
 	case 2:
 		entityList = []interface{}{v2.User{}}
 		availableMigrations = v2.GetMigrations()
-		dataInputArr = []*v2.User{}
 	case 3:
 		entityList = []interface{}{v3.User{}}
 		availableMigrations = append(v3.GetMigrations(), v2.GetMigrations()...)
-		dataInputArr = []*v3.User{}
 	}
 
 	err = initObjectStore(db, entityList, availableMigrations, currentVersionNumber, false)
@@ -59,9 +58,25 @@ func main() {
 
 	if *dataFile != "" {
 		data, _ := ioutil.ReadFile(*dataFile)
-		err := json.Unmarshal(data, &dataInputArr)
+		rawJSONMap := make(map[string][]interface{})
+		err := json.Unmarshal(data, &rawJSONMap)
 		if err != nil {
 			panic(err)
+		}
+
+		fmt.Printf("%v\n", rawJSONMap)
+
+		objectStoreORMAdapter := objectstoreadapter.NewORMAdapter(db)
+		for _, entity := range entityList {
+			modelDef := objectStoreORMAdapter.GetModelDefinition(entity)
+			fmt.Printf("%+v", modelDef)
+			saveUserData(db, entity, rawJSONMap[modelDef.TableName])
+		}
+	}
+
+	if *dumpData {
+		for _, entity := range entityList {
+			dumpUserData(db, entity)
 		}
 	}
 
@@ -85,4 +100,50 @@ func initObjectStore(db *bbolt.DB, entityList []interface{}, migrations []orm.Mi
 	}
 
 	return
+}
+
+func dumpUserData(db *bbolt.DB, entity interface{}) {
+	objectStoreAdapter := objectstoreadapter.NewORMAdapter(db)
+
+	db.View(func(tx *bbolt.Tx) error {
+		bucket := objectStoreAdapter.GetBucketForEntity(entity, tx)
+		if bucket == nil {
+			return fmt.Errorf("No such table")
+		}
+
+		err := bucket.ForEach(func(k, v []byte) error {
+
+			err := json.Unmarshal(v, entity)
+			if err != nil {
+				return err
+			}
+
+			fmt.Printf("%+v\n", entity)
+			return nil
+		})
+
+		return err
+	})
+}
+
+func saveUserData(db *bbolt.DB, entity interface{}, rawDataDictionary []interface{}) {
+
+	db.Update(func(tx *bbolt.Tx) error {
+
+		for _, rawData := range rawDataDictionary {
+			jsonData, err := json.Marshal(rawData)
+			if err != nil {
+				panic(err)
+			}
+
+			err = json.Unmarshal(jsonData, &entity)
+			if err != nil {
+				panic(err)
+			}
+
+			fmt.Printf("Entity %+v\n", entity)
+		}
+		return nil
+	})
+
 }
